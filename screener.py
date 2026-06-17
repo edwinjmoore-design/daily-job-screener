@@ -68,7 +68,7 @@ async def main():
     jobs = fetch_live_endpoint_jobs()
     today_str = datetime.now().strftime("%Y_%m_%d")
     
-    # FIXED: If no jobs are found on the API, send a clear status email instead of crashing out early
+    # If no jobs are found on the API, send a clear status email instead of crashing out early
     if not jobs:
         print("No raw listings found on Adzuna today. Sending status email.")
         send_email_report(None, "No new Endpoint Technician roles were posted on Adzuna in San Diego today. We will scan again tomorrow morning!")
@@ -126,7 +126,7 @@ async def main():
         except Exception as e:
             print(f"Error screening job: {e}")
 
-    # FIXED: If jobs existed but none passed the AI schedule/salary constraints
+    # If jobs existed and passed the AI schedule/salary constraints
     if successful_jobs:
         with open(csv_filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
@@ -161,8 +161,8 @@ def send_email_report(filename, body_content):
             msg.attach(part)
         
     try:
-        server = smtplib.SMTP('://gmail.com', 587)
-        server.starttls()
+        # FIXED: Secure SMTP_SSL over Port 465 bypasses GitHub firewalls completely
+        server = smtplib.SMTP_SSL('://gmail.com', 465)
         server.login(MY_EMAIL, MY_PASSWORD)
         server.sendmail(MY_EMAIL, TARGET_EMAIL, msg.as_string())
         server.quit()
