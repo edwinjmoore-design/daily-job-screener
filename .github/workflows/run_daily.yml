@@ -1,16 +1,16 @@
 name: Run Daily IT Job Screener
 on:
-  workflow_dispatch:
+  workflow_dispatch: 
   schedule:
-    - cron: '0 14 * * *' # Triggers automatically every morning at 7:00 AM PST (14:00 UTC)
+    - cron: '0 14 * * *' 
 jobs:
   run-script:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Install Libraries
@@ -18,7 +18,28 @@ jobs:
       - name: Run Screener Engine
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          MY_EMAIL: ${{ secrets.MY_EMAIL }}
-          MY_PASSWORD: ${{ secrets.MY_PASSWORD }}
-          TARGET_EMAIL: ${{ secrets.TARGET_EMAIL }}
         run: python screener.py
+        
+      - name: Check if CSV or Status message exists
+        id: check_files
+        run: |
+          if [ -f "today_jobs.csv" ]; then
+            echo "mail_body=Hi Edwin, attached is your automated morning IT job spreadsheet match list!" >> $GITHUB_ENV
+            echo "mail_attach=today_jobs.csv" >> $GITHUB_ENV
+          else
+            echo "mail_body=$(cat status.txt)" >> $GITHUB_ENV
+            echo "mail_attach=" >> $GITHUB_ENV
+          fi
+
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ://gmail.com
+          server_port: 465
+          username: ${{ secrets.MY_EMAIL }}
+          password: ${{ secrets.MY_PASSWORD }}
+          subject: 🎯 Daily IT Job Screener Update
+          to: ${{ secrets.TARGET_EMAIL }}
+          from: Daily IT Job Screener
+          body: ${{ env.mail_body }}
+          attachments: ${{ env.mail_attach }}
