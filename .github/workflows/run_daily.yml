@@ -1,5 +1,6 @@
 name: Run Daily IT Job Screener
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 14 * * *' # Triggers automatically every morning at 7:00 AM PST (14:00 UTC)
 jobs:
