@@ -1,5 +1,4 @@
 import os
-import json
 import asyncio
 import csv
 import smtplib
@@ -12,18 +11,18 @@ import requests
 from groq import Groq
 
 # =====================================================
-# SECURE ENVIRONMENT VARIABLES (Configured via GitHub)
+# SECURE ENVIRONMENT VARIABLES
 # =====================================================
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-MY_EMAIL = os.environ.get("MY_EMAIL")          # The email you want to SEND from
-MY_PASSWORD = os.environ.get("MY_PASSWORD")    # An App Password from Google/Yahoo
-TARGET_EMAIL = os.environ.get("TARGET_EMAIL")  # Where you want the daily report sent
+MY_EMAIL = os.environ.get("MY_EMAIL")          
+MY_PASSWORD = os.environ.get("MY_PASSWORD")    
+TARGET_EMAIL = os.environ.get("TARGET_EMAIL")  
 
 client = Groq(api_key=GROQ_API_KEY)
 
 # =====================================================
-# EDWIN'S ENDPOINT TECHNICIAN PROFILE
+# EDWIN'S PROFILE
 # =====================================================
 
 my_resume = """
@@ -46,7 +45,7 @@ def fetch_live_endpoint_jobs():
         "app_id": app_id,
         "app_key": app_key,
         "what": "Endpoint Technician OR Desktop Support OR IT Support Technician",
-        "where": "San Diego",  # Restricts search radius to your region for commute auditing
+        "where": "San Diego",  
         "salary_min": 55000,
         "results_per_page": 5
     }
@@ -67,15 +66,15 @@ def fetch_live_endpoint_jobs():
 
 async def main():
     jobs = fetch_live_endpoint_jobs()
+    today_str = datetime.now().strftime("%Y_%m_%d")
+    
+    # FIXED: If no jobs are found on the API, send a clear status email instead of crashing out early
     if not jobs:
-        print("No new listings found today.")
+        print("No raw listings found on Adzuna today. Sending status email.")
+        send_email_report(None, "No new Endpoint Technician roles were posted on Adzuna in San Diego today. We will scan again tomorrow morning!")
         return
 
-    # Generate a unique filename using today's date to prevent overwriting
-    today_str = datetime.now().strftime("%Y_%m_%d")
     csv_filename = f"endpoint_jobs_{today_str}.csv"
-    
-    # Setup clean CSV spreadsheet columns
     csv_headers = ["Job Title", "Company", "Schedule Check", "Salary Check", "Final Verdict", "Apply URL"]
     successful_jobs = []
 
@@ -115,65 +114,59 @@ async def main():
             )
             analysis = response.choices.message.content
             
-            # Simple line parsing to extract metrics for the Excel columns
-            sched_status = "Unknown"
-            sal_status = "Unknown"
-            verdict = "REJECTED"
-            
+            sched_status, sal_status, verdict = "Unknown", "Unknown", "REJECTED"
             for line in analysis.split("\n"):
                 if "SCHEDULE:" in line: sched_status = line.replace("SCHEDULE:", "").strip()
                 if "SALARY:" in line: sal_status = line.replace("SALARY:", "").strip()
                 if "VERDICT:" in line: verdict = line.replace("VERDICT:", "").strip()
 
-            # Append only recommended jobs to your daily checklist array
             if "HIGHLY RECOMMENDED" in verdict:
                 successful_jobs.append([title, company, sched_status, sal_status, verdict, apply_link])
                 
         except Exception as e:
             print(f"Error screening job: {e}")
 
-    # Write passed matches into the daily CSV file
+    # FIXED: If jobs existed but none passed the AI schedule/salary constraints
     if successful_jobs:
         with open(csv_filename, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(csv_headers)
             writer.writerows(successful_jobs)
         
-        print(f"Spreadsheet compiled successfully: {csv_filename}")
-        send_email_report(csv_filename)
+        body_text = "Hi Edwin,\n\nAttached is your automated morning IT job spreadsheet. These roles have passed your lifestyle checks."
+        send_email_report(csv_filename, body_text)
     else:
-        print("No jobs passed your lifestyle constraints today. No email sent.")
+        print("Jobs were found, but none passed your lifestyle constraints today.")
+        send_email_report(None, "Jobs were found on the market today, but our AI screener filtered them out because they conflicted with your 2 PM childcare window or did not meet your $60k salary target.")
 
 # =====================================================
 # FREE AUTOMATED OUTBOUND EMAIL ENGINE
 # =====================================================
 
-def send_email_report(filename):
+def send_email_report(filename, body_content):
     print("Preparing automated outbound email transmission...")
     msg = MIMEMultipart()
     msg['From'] = MY_EMAIL
     msg['To'] = TARGET_EMAIL
-    msg['Subject'] = f"🎯 Your Daily Endpoint Technician Job Checklist - {datetime.now().strftime('%m/%d/%Y')}"
+    msg['Subject'] = f"🎯 Daily IT Job Screener Update - {datetime.now().strftime('%m/%d/%Y')}"
     
-    body = "Hi Edwin,\n\nAttached is your automated morning IT job spreadsheet. These roles have been filtered to match your $60k+ target and your 2:00 PM - 6:00 PM PST childcare window.\n\nBest of luck!"
-    msg.attach(MIMEText(body, 'plain'))
+    msg.attach(MIMEText(body_content, 'plain'))
     
-    # Attach the CSV file
-    with open(filename, "rb") as attachment:
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload(attachment.read())
-        encode_base64(part)
-        part.add_header('Content-Disposition', f"attachment; filename= {filename}")
-        msg.attach(part)
+    if filename and os.path.exists(filename):
+        with open(filename, "rb") as attachment:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(attachment.read())
+            encode_base64(part)
+            part.add_header('Content-Disposition', f"attachment; filename= {filename}")
+            msg.attach(part)
         
     try:
-        # Utilizing standard secure Google/Yahoo SMTP mail servers
         server = smtplib.SMTP('://gmail.com', 587)
         server.starttls()
         server.login(MY_EMAIL, MY_PASSWORD)
         server.sendmail(MY_EMAIL, TARGET_EMAIL, msg.as_string())
         server.quit()
-        print("🎉 Success! Your job checklist has been delivered to your email inbox.")
+        print("🎉 Success! Status email delivered to your inbox.")
     except Exception as e:
         print(f"Failed to transmit email: {e}")
 
