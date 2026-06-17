@@ -1,0 +1,23 @@
+name: Run Daily IT Job Screener
+on:
+  schedule:
+    - cron: '0 14 * * *' # Triggers automatically every morning at 7:00 AM PST (14:00 UTC)
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/allowed/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install Libraries
+        run: pip install requests groq beautifulsoup4
+      - name: Run Screener Engine
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          MY_EMAIL: ${{ secrets.MY_EMAIL }}
+          MY_PASSWORD: ${{ secrets.MY_PASSWORD }}
+          TARGET_EMAIL: ${{ secrets.TARGET_EMAIL }}
+        run: python screener.py
